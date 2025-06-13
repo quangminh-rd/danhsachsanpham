@@ -132,9 +132,15 @@ function formatNumber(numberString) {
     return formatted.replace('.', ',');
 }
 
-const SPREADSHEET_ID = '14R9efcJ2hGE3mCgmJqi6TNbqkm4GFe91LEAuCyCa4O0';
-const RANGE = 'don_hang!A:BO'; // Mở rộng phạm vi đến cột BO
-const RANGE_CHITIET = 'don_hang_chi_tiet!F:AI'; // Dải dữ liệu từ sheet 'don_hang_chi_tiet'
+const SPREADSHEET_ID_1 = '1_VjjzKwaUdjxsOPdLOGHzcc0b8oyQsj4_Duw_7xmmWo';
+const RANGE_1 = 'tong_hop_don_hang_24!A:AU';
+const RANGE_CHITIET_1 = 'tong_hop_don_hang_chi_tiet_24!C:Y';
+
+
+const SPREADSHEET_ID_2 = '1FLsjyTBi_JfkcDomkgq1ChLWUtrnKv-PfGpPJwt7Zek';
+const RANGE_2 = 'tong_hop_don_hang_25!A:AU';
+const RANGE_CHITIET_2 = 'tong_hop_don_hang_chi_tiet_25!C:Y';
+
 const API_KEY = 'AIzaSyA9g2qFUolpsu3_HVHOebdZb0NXnQgXlFM';
 
 // Lấy giá trị từ URI sau dấu "?" cho các tham số cụ thể
@@ -228,15 +234,31 @@ let orderItems = [];
 
 async function findRowInSheet(maDonhangURI) {
     try {
+        // Tìm trong bảng tính đầu tiên
+        const found = await searchInSheet(SPREADSHEET_ID_1, RANGE_1, maDonhangURI);
+        if (found) return;
+
+        // Nếu không tìm thấy, tìm trong bảng tính thứ hai
+        const foundInSecondSheet = await searchInSheet(SPREADSHEET_ID_2, RANGE_2, maDonhangURI);
+        if (!foundInSecondSheet) {
+            updateContent(`No matching data found for "${maDonhangURI}" in both spreadsheets.`);
+        }
+    } catch (error) {
+        updateContent('Error fetching data: ' + error.message);
+        console.error('Fetch Error:', error);
+    }
+}
+
+async function searchInSheet(spreadsheetId, range, maDonhangURI) {
+    try {
         const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: RANGE,
+            spreadsheetId: spreadsheetId,
+            range: range,
         });
 
         const rows = response.result.values;
         if (!rows || rows.length === 0) {
-            updateContent('No data found.');
-            return;
+            return false;
         }
 
         for (let i = 0; i < rows.length; i++) {
@@ -249,7 +271,7 @@ async function findRowInSheet(maDonhangURI) {
                 orderDetails = {
                     phuongThucban: row[0] || '', // Cột A
                     maDonhang: row[1] || '', // Cột B
-                    maHopdong: row[66] || '', // Cột BO
+                    maHopdong: row[46] || '', // Cột AU
                     donviPhutrach: row[5] || '', // Cột F
                     tenNguoilienhe: row[13] || '', // Cột N
                     tenKhachhangcuoi: row[23] || '', // Cột X
@@ -262,39 +284,41 @@ async function findRowInSheet(maDonhangURI) {
                     sdtKhachhang: row[18] || '', // Cột S
                     sdtKhachhangcuoi: row[22] || '', // Cột W
                     emailKhachhang: row[19] || '', // Cột T
-                    hanGiaohang: row[70] || '', // Cột BS
+                    hanGiaohang: row[50] || '', // Cột AY
                     tongSobo: row[25] || '', // Cột Z
-                    congnpp: row[43] || '', // Cột AR
-                    mucChietkhaunpp: row[44] || '', // Cột AS
-                    giatriChietkhaunpp: row[45] || '', // Cột AT
-                    phiVanchuyenlapdatnpp: row[46] || '', // Cột AU
-                    mucthueGTGTnpp: row[47] || '', // Cột AV
-                    thueGTGTnpp: row[48] || '', // Cột AW
-                    tamUngnpp: row[49] || '', // Cột AX
-                    sotienConthieunpp: row[58] || '',
+                    congnpp: row[35] || '', // Cột AJ
+                    mucChietkhaunpp: row[36] || '', // Cột AK
+                    giatriChietkhaunpp: row[37] || '', // Cột AL
+                    phiVanchuyenlapdatnpp: row[38] || '', // Cột AM
+                    mucthueGTGTnpp: row[39] || '', // Cột AN
+                    thueGTGTnpp: row[40] || '', // Cột AO
+                    tamUngnpp: row[41] || '', // Cột AP
+                    sotienPhaithanhtoannpp: row[42] || '', // Cột AQ
                     maKhachHang: uriData.maKhachHangURI,
                 };
 
                 // Xử lý dữ liệu tìm được
                 processFoundData(orderDetails);
-                return; // Dừng khi tìm thấy
+                return true; // Dừng khi tìm thấy
             }
         }
-
-        updateContent(`No matching data found for "${maDonhangURI}".`);
+        return false; // Không tìm thấy
     } catch (error) {
-        updateContent('Error fetching data: ' + error.message);
-        console.error('Fetch Error:', error);
+        console.error('Error in searchInSheet:', error);
+        return false;
     }
 }
 
 function processFoundData(orderDetails) {
+    // Tính toán giá trị sotienConthieu
+    const sotienConthieunpp = formatNumber(orderDetails.sotienPhaithanhtoannpp) - formatNumber(orderDetails.tamUngnpp);
+
     // Định dạng và chuyển đổi số tiền
-    const formattedSotien = formatNumber(orderDetails.sotienConthieunpp || '0');
     const doctien = new DocTienBangChu();
-    const sotienBangchu = doctien.doc(formattedSotien);
+    const sotienBangchu = doctien.doc(sotienConthieunpp);
 
     // Cập nhật giá trị sotienBangchu vào orderDetails
+    orderDetails.sotienConthieunpp = sotienConthieunpp.toLocaleString('vi-VN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
     orderDetails.sotienBangchu = sotienBangchu;
 
     // Cập nhật DOM
@@ -305,16 +329,8 @@ function processFoundData(orderDetails) {
     });
     if (sotienBangchu) updateElement('sotienBangchu', sotienBangchu);
 
-    // Kiểm tra và hiển thị mã hợp đồng
-    if (orderDetails.maHopdong && orderDetails.maHopdong.trim() !== '') {
-        const hopdongContainer = document.getElementById('hopdong-container');
-        document.getElementById('maHopdong').textContent = orderDetails.maHopdong;
-        hopdongContainer.style.display = 'block';
-    }
-
     // Gọi các hàm hiển thị nội dung
     displayHTML(orderDetails);
-    displayConditions(orderDetails);
 
     function toggleRowVisibility(rowId, value) {
         const row = document.getElementById(rowId);
@@ -344,6 +360,7 @@ function processFoundData(orderDetails) {
 
 function displayHTML() {
     // Trích xuất các giá trị cần thiết từ data
+    const maHopdong = orderDetails.maHopdong || '';
     const phuongThucban = orderDetails.phuongThucban || '';
     const donviPhutrach = orderDetails.donviPhutrach || '';
     const tenNguoilienhe = orderDetails.tenNguoilienhe || '';
@@ -367,38 +384,28 @@ function displayHTML() {
 
     let htmlContent = "";
 
-    if (donviPhutrach === "BP. BH1" && phuongThucban !== "Bán chéo") {
+    if (tenKhachhangcuoi !== "") {
         htmlContent = `
                             <tbody>
                                     <tr>
-                                        <td class="infocol-1"><i>Kính gửi:</i></td>
-                                        <td class="infocol-2">${tenNguoilienhe}</td>
-                                        <td class="infocol-3"><i>Ngày phát hành:</i></td>
-                                        <td class="infocol-4">${ngayPhatHanh}</td>
+                                        <td class="infocol-1"><i>Mã đơn hàng:</i></td>
+                                        <td class="infocol-2" colspan="3">${maHopdong}</td>
                                     </tr>
                                     <tr>
-                                        <td class="infocol-1"><i>Đơn vị:</i></td>
-                                        <td class="infocol-2">${tenTochuc}</td>
-                                        <td class="infocol-3"><i>Đơn vị trực thuộc:</i></td>
-                                        <td class="infocol-4">${donviPhutrach}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Địa chỉ:</i></td>
-                                        <td class="infocol-2">${diachiChitiet}</td>
+                                        <td class="infocol-1"><i>Khách hàng:</i></td>
+                                        <td class="infocol-2">${tenKhachhangcuoi}</td>
                                         <td class="infocol-3"><i>Soạn báo giá:</i></td>
                                         <td class="infocol-4">${tenNhanvien}</td>
                                     </tr>
                                     <tr>
-                                        <td class="infocol-1"><i>SĐT:</i></td>
-                                        <td class="infocol-2">${sdtKhachhang}</td>
-                                        <td class="infocol-3"><i>SĐT:</i></td>
+                                        <td class="infocol-1"><i>Số điện thoại:</i></td>
+                                        <td class="infocol-2">${sdtKhachhangcuoi}</td>
+                                        <td class="infocol-3"><i>Số điện thoại:</i></td>
                                         <td class="infocol-4">${sdtNhanvien}</td>
                                     </tr>
                                     <tr>
-                                        <td class="infocol-1"><i>Email:</i></td>
-                                        <td class="infocol-2">
-                                                <b><font color="red">${emailKhachhang}</font></b>
-                                            </td>
+                                        <td class="infocol-1"><i>Địa chỉ:</i></td>
+                                        <td class="infocol-2">${diachiKhachhangcuoi}</td>
                                         <td class="infocol-3"><i>CSKH:</i></td>
                                         <td class="infocol-4">
                                                 <b><font color="red">1900 0282</font></b>
@@ -406,200 +413,80 @@ function displayHTML() {
                                     </tr>
                                 </tbody>
                             `;
-    } else if (donviPhutrach === "BP. BH1" && phuongThucban === "Bán chéo") {
+    } else if (tenKhachhangcuoi === "") {
         htmlContent = `
-                                <tbody>
+                            <tbody>
                                     <tr>
-                                        <td class="infocol-1"><i>Kính gửi:</i></td>
-                                        <td class="infocol-2">${tenNguoilienhe}</td>
-                                        <td class="infocol-3"><i>Ngày phát hành:</i></td>
-                                        <td class="infocol-4">${ngayPhatHanh}</td>
+                                        <td class="infocol-1"><i>Mã đơn hàng:</i></td>
+                                        <td class="infocol-2" colspan="3">${maHopdong}</td>
                                     </tr>
                                     <tr>
-                                        <td class="infocol-1"><i>Đơn vị:</i></td>
-                                        <td class="infocol-2"></td>
-                                        <td class="infocol-3"><i>Đơn vị trực thuộc:</i></td>
-                                        <td class="infocol-4">${donviPhutrach}</td>
+                                        <td class="infocol-1"><i>Khách hàng:</i></td>
+                                        <td class="infocol-2">${tenNguoilienhe}</td>
+                                        <td class="infocol-3"><i>Soạn báo giá:</i></td>
+                                        <td class="infocol-4">${tenNhanvien}</td>
+                                    </tr>
+                                    <tr>
+                                        <td class="infocol-1"><i>Số điện thoại:</i></td>
+                                        <td class="infocol-2">${sdtKhachhang}</td>
+                                        <td class="infocol-3"><i>Số điện thoại:</i></td>
+                                        <td class="infocol-4">${sdtNhanvien}</td>
                                     </tr>
                                     <tr>
                                         <td class="infocol-1"><i>Địa chỉ:</i></td>
                                         <td class="infocol-2">${diachiChitiet}</td>
-                                        <td class="infocol-3"><i>Soạn báo giá:</i></td>
-                                        <td class="infocol-4">${tenNhanvien}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>SĐT:</i></td>
-                                        <td class="infocol-2">${sdtKhachhang}</td>
-                                        <td class="infocol-3"><i>SĐT:</i></td>
-                                        <td class="infocol-4">${sdtNhanvien}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Địa chỉ công trình:</i></td>
-                                        <td class="infocol-2">
-                                                <b><font color="red">${tenKhachhangcuoi} - ${diachiKhachhangcuoi} - ${sdtKhachhangcuoi}</font></b>
-                                            </td>
                                         <td class="infocol-3"><i>CSKH:</i></td>
                                         <td class="infocol-4">
                                                 <b><font color="red">1900 0282</font></b>
                                             </td>
                                     </tr>
                                 </tbody>
-                                `;
-    } else if (donviPhutrach !== "BP. BH1" && hanGiaohang !== "") {
-        htmlContent = `
-                                   <tbody>
-                                    <tr>
-                                        <td class="infocol-1"><i>Kính gửi:</i></td>
-                                        <td class="infocol-2"></span></td>
-                                        <td class="infocol-3"><i>Ngày phát hành:</i></td>
-                                        <td class="infocol-4">${ngayPhatHanh}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Đơn vị:</i></td>
-                                        <td class="infocol-2">${donviPhutrach}</td>
-                                        <td class="infocol-3"><i>Dự kiến giao:</i></td>
-                                        <td class="infocol-4">${hanGiaohang}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Địa chỉ:</i></td>
-                                        <td class="infocol-2">${diachi}</td>
-                                        <td class="infocol-3"><i>Soạn báo giá:</i></td>
-                                        <td class="infocol-4">${tenNhanvien}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>SĐT:</i></td>
-                                        <td class="infocol-2">${sdtNhanvien}</td>
-                                        <td class="infocol-3"><i></i></td>
-                                        <td class="infocol-4"></td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Công trình:</i></td>
-                                        <td class="infocol-2">
-                                                <b><font color="red">${tenNguoilienhe} - ${diachiChitiet} - ${sdtKhachhang}</font></b>
-                                            </td>
-                                        <td class="infocol-3"><i>CSKH:</i></td>
-                                        <td class="infocol-4">
-                                                <b><font color="red">1900 0282</font></b>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                `;
-    } else if (donviPhutrach !== "BP. BH1" && hanGiaohang === "") {
-        htmlContent = `
-                                   <tbody>
-                                    <tr>
-                                        <td class="infocol-1"><i>Kính gửi:</i></td>
-                                        <td class="infocol-2"></span></td>
-                                        <td class="infocol-3"><i>Ngày phát hành:</i></td>
-                                        <td class="infocol-4">${ngayPhatHanh}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Đơn vị:</i></td>
-                                        <td class="infocol-2">${donviPhutrach}</td>
-                                        <td class="infocol-3"><i>Dự kiến giao:</i></td>
-                                        <td class="infocol-4">Trao đổi với QLSX</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Địa chỉ:</i></td>
-                                        <td class="infocol-2">${diachi}</td>
-                                        <td class="infocol-3"><i>Soạn báo giá:</i></td>
-                                        <td class="infocol-4">${tenNhanvien}</td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>SĐT:</i></td>
-                                        <td class="infocol-2">${sdtNhanvien}</td>
-                                        <td class="infocol-3"><i></i></td>
-                                        <td class="infocol-4"></td>
-                                    </tr>
-                                    <tr>
-                                        <td class="infocol-1"><i>Công trình:</i></td>
-                                        <td class="infocol-2">
-                                                <b><font color="red">${tenNguoilienhe} - ${diachiChitiet} - ${sdtKhachhang}</font></b>
-                                            </td>
-                                        <td class="infocol-3"><i>CSKH:</i></td>
-                                        <td class="infocol-4">
-                                                <b><font color="red">1900 0282</font></b>
-                                        </td>
-                                    </tr>
-                                </tbody>
-                                `;
+                            `;
     }
 
     document.getElementById("content").innerHTML = htmlContent;
 }
 
-function displayConditions() {
-    // Trích xuất các giá trị cần thiết từ data
-    const phuongThucban = orderDetails.phuongThucban || '';
-    const donviPhutrach = orderDetails.donviPhutrach || '';
-    const thueGTGTnpp = orderDetails.thueGTGTnpp || '';
-    const phiVanchuyenlapdatnpp = orderDetails.phiVanchuyenlapdatnpp || '';
-
-    let outputHTML = ""; // Đổi tên biến từ htmlContent thành outputHTML
-
-    // Điều kiện cho thuế GTGT
-    if (thueGTGTnpp === "0") {
-        outputHTML += `<p>1. Giá trên chưa bao gồm thuế GTGT.</p>`;
-    } else {
-        outputHTML += `<p>1. Giá trên đã bao gồm thuế GTGT.</p>`;
-    }
-
-    // Điều kiện cho phí vận chuyển và phương thức bán
-    if ((phiVanchuyenlapdatnpp === "" || phiVanchuyenlapdatnpp === "0") && phuongThucban !== "Bán lẻ") {
-        outputHTML += `<p>2. Giá trên chưa bao gồm phí vận chuyển, lắp đặt.</p>`;
-    } else {
-        outputHTML += `<p>2. Giá trên đã bao gồm phí vận chuyển, lắp đặt.</p>`;
-    }
-
-    // Điều kiện cho đơn vị phụ trách và phương thức bán
-    if (donviPhutrach === "BP. BH1" && phuongThucban === "Bán đại lý") {
-        outputHTML += `
-                                <p>3. Giá trên có hiệu lực 30 ngày kể từ ngày phát hành.</p>
-                                <p>4. Thanh toán 100% tổng giá trị đơn hàng trước khi giao hàng.</p>
-                                <p>5. Giao hàng sau 3 đến 5 ngày làm việc, kể từ ngày chốt đơn.</p>
-                                <p>6. Thời gian bảo hành 12 tháng theo tiêu chuẩn của nhà sản xuất.</p>
-                            `;
-    } else {
-        outputHTML += `
-                                <p>3. Giá trên có hiệu lực 30 ngày kể từ ngày phát hành.</p>
-                                <p>4. Tạm ứng 50% tổng giá trị đơn hàng, thanh toán hết số còn lại sau khi nghiệm thu bàn giao.</p>
-                                <p>5. Lắp đặt sau 5 đến 7 ngày làm việc, kể từ ngày nhận được tiền tạm ứng lần 1.</p>
-                                <p>6. Thời gian bảo hành:</p>
-                                <p style="padding-left: 20px;"> - Bảo hành 2 năm phụ kiện lắp đồng bộ với cửa, tay nắm, bánh xe, ổ khóa, động cơ, điều khiển, phụ kiện nhựa, …</p>
-                                <p style="padding-left: 20px;"> - Bảo hành 2 năm sản phẩm Cửa xếp rèm tổ ong; Cửa xếp 2 trong 1/ xếp xích 2 trong 1 kết hợp lưới và rèm.</p>
-                                <p style="padding-left: 20px;"> - Bảo hành 3 năm sản phẩm Cửa lưới sợi thủy tinh; Cửa xếp/ xếp xích lưới PL, PVC, PET; Cửa xếp lưới nhôm, lá nhựa PC.</p>
-                                <p style="padding-left: 20px;"> - BBảo hành 5 năm sản phẩm Cửa lưới Inox.</p>
-                            `;
-    }
-
-    // Hiển thị nội dung HTML trong thẻ `content`
-    document.getElementById("contentfooter").innerHTML = outputHTML;
-}
-
 // Tìm chi tiết trong bảng tính
 async function findDetailsInSheet(maDonhangURI) {
     try {
-        const response = await gapi.client.sheets.spreadsheets.values.get({
-            spreadsheetId: SPREADSHEET_ID,
-            range: RANGE_CHITIET,
-        });
+        // Tìm trong bảng tính đầu tiên
+        const found = await searchDetailsInSheet(SPREADSHEET_ID_1, RANGE_CHITIET_1, maDonhangURI);
+        if (found) return;
 
-        const rows = response.result.values;
-        if (!rows || rows.length === 0) {
-            updateContent('No detail data found.');
-            return;
-        }
-
-        const filteredRows = rows.filter(row => row[0] === maDonhangURI); // Lọc các dòng có giá trị cột F khớp với maDonhangURI
-        orderItems = filteredRows.map(extractDetailDataFromRow);
-        if (filteredRows.length > 0) {
-            displayDetailData(filteredRows);
-        } else {
-            updateContent('No matching data found.');
+        // Nếu không tìm thấy, tìm trong bảng tính thứ hai
+        const foundInSecondSheet = await searchDetailsInSheet(SPREADSHEET_ID_2, RANGE_CHITIET_2, maDonhangURI);
+        if (!foundInSecondSheet) {
+            updateContent('No matching detail data found in both spreadsheets.');
         }
     } catch (error) {
         console.error('Error fetching detail data:', error);
         updateContent('Error fetching detail data.');
+    }
+}
+
+async function searchDetailsInSheet(spreadsheetId, range, maDonhangURI) {
+    try {
+        const response = await gapi.client.sheets.spreadsheets.values.get({
+            spreadsheetId: spreadsheetId,
+            range: range,
+        });
+
+        const rows = response.result.values;
+        if (!rows || rows.length === 0) {
+            return false;
+        }
+
+        const filteredRows = rows.filter(row => row[0] === maDonhangURI); // Lọc các dòng có giá trị cột A khớp với maDonhangURI
+        if (filteredRows.length > 0) {
+            orderItems = filteredRows.map(extractDetailDataFromRow);
+            displayDetailData(filteredRows);
+            return true; // Dừng khi tìm thấy
+        }
+        return false; // Không tìm thấy
+    } catch (error) {
+        console.error('Error in searchDetailsInSheet:', error);
+        return false;
     }
 }
 
@@ -622,10 +509,6 @@ function displayDetailData(filteredRows) {
                     <td class="borderedcol-6">${item.chieuCao || ''}</td>
                     <td class="borderedcol-7">${item.dienTich || ''}</td>
                     <td class="borderedcol-8">${item.soLuong || ''}</td>
-                    <td class="borderedcol-9">${item.dvt || ''}</td>
-                    <td class="borderedcol-10">${item.khoiLuong || ''}</td>
-                    <td class="borderedcol-11">${item.dongianpp || ''}</td>
-                    <td class="borderedcol-12">${item.giabannpp || ''}</td>
                 </tr>
             `;
         } else {
@@ -639,10 +522,6 @@ function displayDetailData(filteredRows) {
                     <td class="borderedcol-6">${item.chieuCao || ''}</td>
                     <td class="borderedcol-7">${item.dienTich || ''}</td>
                     <td class="borderedcol-8">${item.soLuong || ''}</td>
-                    <td class="borderedcol-9">${item.dvt || ''}</td>
-                    <td class="borderedcol-10">${item.khoiLuong || ''}</td>
-                    <td class="borderedcol-11">${item.dongianpp || ''}</td>
-                    <td class="borderedcol-12">${item.giabannpp || ''}</td>
                 </tr>
             `;
         }
@@ -654,19 +533,19 @@ function displayDetailData(filteredRows) {
 function extractDetailDataFromRow(row) {
     return {
         maDonhangCT: row[0],
-        sttTrongdon: row[2],
-        vitriLapdat: row[4],
-        diengiai: row[11],
-        maSanphamid: row[9],
-        ghiChu: row[19],
-        chieuRong: row[12],
-        chieuCao: row[13],
-        dienTich: row[14],
-        soLuong: row[16],
-        dvt: row[17],
-        khoiLuong: row[18],
-        dongianpp: row[25],
-        giabannpp: row[26],
+        sttTrongdon: row[1],
+        vitriLapdat: row[3],
+        diengiai: row[10],
+        maSanphamid: row[8],
+        ghiChu: row[17],
+        chieuRong: row[11],
+        chieuCao: row[12],
+        dienTich: row[13],
+        soLuong: row[14],
+        dvt: row[15],
+        khoiLuong: row[16],
+        dongianpp: row[20],
+        giabannpp: row[21],
     };
 }
 
